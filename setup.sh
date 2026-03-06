@@ -18,8 +18,8 @@ echo "-> Installing Python packages..."
 pip install -r requirements.txt
 
 # Download spaCy model
-echo "-> Downloading spaCy transformer model (this may take a few minutes)..."
-python -m spacy download en_core_web_trf
+echo "-> Downloading spaCy model..."
+python -m spacy download en_core_web_sm
 
 # Create necessary directories
 echo "-> Creating directories..."

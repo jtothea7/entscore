@@ -25,7 +25,7 @@ RELEVANT_ENTITY_TYPES = {
 
 
 class EntityExtractor:
-    def __init__(self, model_name: str = "en_core_web_trf"):
+    def __init__(self, model_name: str = "en_core_web_sm"):
         """Load spaCy model once at init."""
         logger.info(f"Loading spaCy model: {model_name}")
         self.nlp = spacy.load(model_name)
