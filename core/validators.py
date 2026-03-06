@@ -1,12 +1,26 @@
 """
 Input validation functions
 """
-from typing import Tuple, List
+from typing import Tuple, List, Optional
+import os
 import re
 from urllib.parse import urlparse
 
 import pandas as pd
 import requests
+
+
+def get_credentials() -> Tuple[Optional[str], Optional[str]]:
+    """Get DataForSEO credentials from st.secrets (Streamlit Cloud) or .env."""
+    try:
+        import streamlit as st
+        login = st.secrets.get("DATAFORSEO_LOGIN")
+        password = st.secrets.get("DATAFORSEO_PASSWORD")
+        if login and password:
+            return login, password
+    except Exception:
+        pass
+    return os.getenv("DATAFORSEO_LOGIN"), os.getenv("DATAFORSEO_PASSWORD")
 
 
 def validate_url(url: str, check_reachable: bool = False) -> Tuple[bool, str]:

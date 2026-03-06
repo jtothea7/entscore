@@ -5,7 +5,7 @@ import streamlit as st
 import os
 from dotenv import load_dotenv, set_key
 
-from core.validators import validate_dataforseo_credentials
+from core.validators import validate_dataforseo_credentials, get_credentials
 from core.cache import Cache
 from core.api_tracker import APITracker
 from db.database import get_connection, init_database, get_api_usage_total
@@ -20,8 +20,9 @@ def render_settings_page():
     st.subheader("DataForSEO API")
 
     load_dotenv()
-    current_login = os.getenv("DATAFORSEO_LOGIN", "")
-    current_password = os.getenv("DATAFORSEO_PASSWORD", "")
+    current_login, current_password = get_credentials()
+    current_login = current_login or ""
+    current_password = current_password or ""
 
     has_creds = bool(current_login and current_password)
     if has_creds:

@@ -33,6 +33,7 @@ from db.database import (
     save_entities,
     get_previous_analysis,
 )
+from core.validators import get_credentials
 from core.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -74,10 +75,9 @@ def run_analysis(
         if progress_callback:
             progress_callback(step, progress)
 
-    # Load environment
+    # Load credentials (st.secrets on Streamlit Cloud, .env locally)
     load_dotenv()
-    login = os.getenv("DATAFORSEO_LOGIN")
-    password = os.getenv("DATAFORSEO_PASSWORD")
+    login, password = get_credentials()
 
     if not login or not password:
         raise ValueError(

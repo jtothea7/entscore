@@ -8,7 +8,7 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 
-from core.validators import validate_url, validate_keyword
+from core.validators import validate_url, validate_keyword, get_credentials
 from core.gap_analyzer import run_analysis
 from core.dataforseo_client import DataForSEOClient
 from ui.components.empty_state import render_first_run
@@ -45,7 +45,8 @@ def render_analyze_page():
 
     # Check for credentials
     load_dotenv()
-    has_creds = bool(os.getenv("DATAFORSEO_LOGIN") and os.getenv("DATAFORSEO_PASSWORD"))
+    cred_login, cred_password = get_credentials()
+    has_creds = bool(cred_login and cred_password)
 
     if not has_creds:
         st.warning(
@@ -130,9 +131,7 @@ def render_analyze_page():
                 location_name = matched_preset["name"]
             else:
                 # Look up via DataForSEO
-                login = os.getenv("DATAFORSEO_LOGIN")
-                password = os.getenv("DATAFORSEO_PASSWORD")
-                dfs = DataForSEOClient(login, password)
+                dfs = DataForSEOClient(cred_login, cred_password)
 
                 with st.spinner(f"Looking up location: {location_input}..."):
                     locations = dfs.search_locations(location_input.strip())
