@@ -1,3 +1,13 @@
+---
+title: EntScore
+emoji: 🎯
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # EntScore
 
 SEO page optimization tool that analyzes your page against top-ranking competitors and generates actionable optimization briefs.

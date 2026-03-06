@@ -1,7 +1,3 @@
-# Use CPU-only PyTorch (150MB instead of 2GB)
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-
 # Core dependencies
 streamlit>=1.30.0
 pandas>=2.1.0
@@ -15,8 +11,8 @@ sentence-transformers>=2.2.0
 spacy>=3.7.0
 scikit-learn>=1.3.0
 
-# spaCy model (small — 12MB instead of 500MB)
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+# spaCy model
+https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
 
 # Web scraping
 trafilatura>=1.6.0

@@ -14,7 +14,7 @@ dataforseo:
 
 models:
   bert_model: "all-MiniLM-L6-v2"
-  spacy_model: "en_core_web_sm"
+  spacy_model: "en_core_web_lg"
 
 analysis:
   default_competitor_count: 10
