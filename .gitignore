@@ -1,0 +1,35 @@
+# Environment
+.env
+venv/
+.venv/
+
+# Generated files
+exports/*
+!exports/.gitkeep
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Database
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

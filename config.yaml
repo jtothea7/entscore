@@ -1,0 +1,47 @@
+# EntScore Configuration
+# Secrets (API credentials) go in .env, NOT here
+
+app:
+  name: "EntScore"
+  version: "1.0.0"
+  minimum_viable_competitors: 5  # Warn if fewer competitors successfully scraped
+
+dataforseo:
+  base_url: "https://api.dataforseo.com/v3"
+  max_retries: 3
+  retry_backoff: [1, 3, 10]  # seconds between retry attempts
+  timeout: 30
+
+models:
+  bert_model: "all-MiniLM-L6-v2"
+  spacy_model: "en_core_web_lg"
+
+analysis:
+  default_competitor_count: 10
+  min_entity_frequency: 3              # Min competitor appearances to flag "missing"
+  entity_salience_threshold: 0.1       # Min salience to consider relevant
+  entity_similarity_threshold: 0.92    # BERT similarity for deduplication
+
+scraping:
+  timeout: 15
+  max_retries: 2
+  max_concurrent_threads: 5            # Max parallel scraping threads
+  user_agent: "EntScore/1.0 (SEO Analysis Tool)"
+  fallback_chain: ["trafilatura", "dataforseo_onpage", "serp_snippet"]
+
+export:
+  default_format: "markdown"
+  filename_pattern: "{domain}-{keyword_slug}-{date}-{type}"
+
+cache:
+  serp_ttl_hours: 24
+  keyword_metrics_ttl_days: 7
+  scrape_ttl_days: 7
+
+health_score:
+  weights:
+    entity_coverage: 0.40
+    heading_structure: 0.20
+    word_count: 0.20
+    readability: 0.10
+    internal_links: 0.10
