@@ -1,8 +1,8 @@
 """
 GSC-driven page opportunity ranking (audit queue).
 
-Upload a GSC CSV -> see all pages sorted by optimization opportunity ->
-click any row to auto-populate analyze page.
+Upload GSC Queries CSV and/or Pages CSV -> see opportunities sorted by score ->
+pick a URL + keyword combo to auto-populate the analyze page.
 """
 import streamlit as st
 import pandas as pd
@@ -17,95 +17,123 @@ def render_audit_queue_page():
     """Render the GSC audit queue page."""
     st.header("Page Audit Queue")
     st.markdown(
-        "Upload a Google Search Console CSV export to find your biggest optimization opportunities."
+        "Upload your Google Search Console CSV exports to find your biggest optimization opportunities."
     )
 
-    # Upload section
-    uploaded_file = st.file_uploader(
-        "Upload GSC CSV",
-        type=["csv"],
-        help="Export from Google Search Console > Performance > Export",
-    )
+    # Two file uploaders side by side
+    col1, col2 = st.columns(2)
 
-    if uploaded_file:
+    with col1:
+        queries_file = st.file_uploader(
+            "Queries CSV",
+            type=["csv"],
+            help="GSC > Performance > Export > Queries",
+            key="gsc_queries",
+        )
+
+    with col2:
+        pages_file = st.file_uploader(
+            "Pages CSV",
+            type=["csv"],
+            help="GSC > Performance > Export > Pages",
+            key="gsc_pages",
+        )
+
+    # Process uploads
+    if queries_file:
         try:
-            records, warnings = parse_gsc_csv(uploaded_file)
-
-            if warnings:
-                for w in warnings:
-                    st.warning(w)
-
-            # Save to database
+            records, warnings, csv_type = parse_gsc_csv(queries_file)
+            for w in warnings:
+                st.warning(w)
             conn = get_connection()
             try:
-                save_gsc_data(conn, records)
+                save_gsc_data(conn, records, source_type="queries")
             finally:
                 conn.close()
+            show_success(f"Imported {len(records)} keywords from Queries CSV.")
+        except (ValueError, Exception) as e:
+            show_error(f"Queries CSV error: {str(e)}")
 
-            show_success(f"Imported {len(records)} records from GSC CSV.")
-
-        except ValueError as e:
-            show_error(str(e))
-        except Exception as e:
-            show_error(f"Failed to parse CSV: {str(e)}")
+    if pages_file:
+        try:
+            records, warnings, csv_type = parse_gsc_csv(pages_file)
+            for w in warnings:
+                st.warning(w)
+            conn = get_connection()
+            try:
+                save_gsc_data(conn, records, source_type="pages")
+            finally:
+                conn.close()
+            show_success(f"Imported {len(records)} pages from Pages CSV.")
+        except (ValueError, Exception) as e:
+            show_error(f"Pages CSV error: {str(e)}")
 
     st.divider()
 
-    # Display audit queue
+    # Load data
     conn = get_connection()
     try:
-        gsc_records = get_gsc_data(conn, limit=100)
+        query_records = get_gsc_data(conn, source_type="queries", limit=200)
+        page_records = get_gsc_data(conn, source_type="pages", limit=200)
     finally:
         conn.close()
 
-    if not gsc_records:
+    if not query_records and not page_records:
         render_empty_state(
             title="No GSC Data",
-            message="Upload a Google Search Console CSV to see your page optimization opportunities.",
+            message="Upload your GSC Queries and Pages CSV files to see optimization opportunities.",
             icon="chart",
         )
         return
 
-    # Build dataframe
-    df = pd.DataFrame(gsc_records)
-    display_df = df[
-        ["keyword", "url", "clicks", "impressions", "ctr", "position", "opportunity_score"]
-    ].copy()
+    # Pages table
+    if page_records:
+        st.subheader("Page Opportunities")
+        st.caption("Pages with high impressions but low CTR and poor position — your biggest wins.")
 
-    display_df["ctr"] = display_df["ctr"].apply(lambda x: f"{x:.1%}")
-    display_df["position"] = display_df["position"].apply(lambda x: f"{x:.1f}")
-    display_df["opportunity_score"] = display_df["opportunity_score"].apply(
-        lambda x: f"{x:.1f}"
-    )
+        pages_df = pd.DataFrame(page_records)
+        display_pages = pages_df[["url", "clicks", "impressions", "ctr", "position", "opportunity_score"]].copy()
+        display_pages["ctr"] = display_pages["ctr"].apply(lambda x: f"{x:.1%}")
+        display_pages["position"] = display_pages["position"].apply(lambda x: f"{x:.1f}")
+        display_pages["opportunity_score"] = display_pages["opportunity_score"].apply(lambda x: f"{x:.1f}")
+        display_pages.columns = ["URL", "Clicks", "Impressions", "CTR", "Position", "Opportunity"]
 
-    display_df.columns = [
-        "Keyword", "URL", "Clicks", "Impressions", "CTR", "Position", "Opportunity"
-    ]
+        st.dataframe(display_pages, use_container_width=True, hide_index=True, height=350)
 
-    st.markdown(f"**{len(display_df)} pages** sorted by optimization opportunity:")
+    # Queries table
+    if query_records:
+        st.subheader("Keyword Opportunities")
+        st.caption("Keywords where you're getting impressions but not clicks — optimize these pages.")
 
-    # Render as dataframe with selection
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        height=500,
-    )
+        queries_df = pd.DataFrame(query_records)
+        display_queries = queries_df[["keyword", "clicks", "impressions", "ctr", "position", "opportunity_score"]].copy()
+        display_queries["ctr"] = display_queries["ctr"].apply(lambda x: f"{x:.1%}")
+        display_queries["position"] = display_queries["position"].apply(lambda x: f"{x:.1f}")
+        display_queries["opportunity_score"] = display_queries["opportunity_score"].apply(lambda x: f"{x:.1f}")
+        display_queries.columns = ["Keyword", "Clicks", "Impressions", "CTR", "Position", "Opportunity"]
+
+        st.dataframe(display_queries, use_container_width=True, hide_index=True, height=350)
 
     st.divider()
 
     # Quick-analyze from queue
     st.subheader("Analyze from Queue")
-    st.markdown("Select a keyword and URL from the table above, or enter them manually:")
+    st.markdown("Pick a URL and keyword from the tables above, then hit Analyze.")
 
-    keywords = df["keyword"].unique().tolist()
-    urls = df["url"].unique().tolist()
+    # Build dropdown options
+    url_options = []
+    if page_records:
+        url_options = [r["url"] for r in page_records if r.get("url")]
+
+    keyword_options = []
+    if query_records:
+        keyword_options = [r["keyword"] for r in query_records if r.get("keyword")]
 
     col1, col2 = st.columns(2)
     with col1:
-        selected_keyword = st.selectbox("Keyword", options=[""] + keywords)
+        selected_url = st.selectbox("URL", options=[""] + url_options)
     with col2:
-        selected_url = st.selectbox("URL", options=[""] + [u for u in urls if u])
+        selected_keyword = st.selectbox("Keyword", options=[""] + keyword_options)
 
     if st.button("Analyze This Page", type="primary", disabled=not (selected_keyword and selected_url)):
         st.session_state["prefill_url"] = selected_url
@@ -113,14 +141,14 @@ def render_audit_queue_page():
         st.session_state["current_page"] = "analyze"
         st.rerun()
 
-    # Opportunity score explanation
+    # Explanation
     with st.expander("How is Opportunity Score calculated?"):
         st.markdown(
             """
             **Opportunity Score = Impressions x (1 - CTR) x (1 / Position)**
 
-            Pages with **high impressions**, **low CTR**, and **poor position** are the
-            biggest opportunities. These are pages Google already shows to users, but that
+            Pages/keywords with **high impressions**, **low CTR**, and **poor position**
+            are the biggest opportunities. These are already being shown by Google but
             aren't getting clicks — optimizing them has the highest potential ROI.
             """
         )

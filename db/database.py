@@ -95,8 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_entities_gap_status ON entities(gap_status);
 -- GSC data (uploaded CSV data)
 CREATE TABLE IF NOT EXISTS gsc_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    url TEXT NOT NULL,
-    keyword TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'queries',
+    url TEXT NOT NULL DEFAULT '',
+    keyword TEXT NOT NULL DEFAULT '',
     clicks INTEGER,
     impressions INTEGER,
     ctr REAL,
@@ -106,6 +107,7 @@ CREATE TABLE IF NOT EXISTS gsc_data (
 );
 
 CREATE INDEX IF NOT EXISTS idx_gsc_url ON gsc_data(url);
+CREATE INDEX IF NOT EXISTS idx_gsc_source ON gsc_data(source_type);
 CREATE INDEX IF NOT EXISTS idx_gsc_opportunity ON gsc_data(opportunity_score DESC);
 
 -- API usage tracking (cost per call)
@@ -143,7 +145,7 @@ CREATE TABLE IF NOT EXISTS scrape_cache (
 CREATE INDEX IF NOT EXISTS idx_scrape_cache_expires ON scrape_cache(expires_at);
 """
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
@@ -169,6 +171,10 @@ def init_database(db_path: str = DB_PATH):
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (CURRENT_SCHEMA_VERSION,))
 
         conn.commit()
+
+        # Run any pending migrations for existing databases
+        run_migrations(conn)
+
         logger.info(f"Database initialized at {db_path}")
     finally:
         conn.close()
@@ -188,9 +194,16 @@ def run_migrations(conn: sqlite3.Connection):
     """Run any pending migrations."""
     current_version = get_schema_version(conn)
 
+    def migrate_v2(conn):
+        """Add source_type column to gsc_data and index."""
+        try:
+            conn.execute("ALTER TABLE gsc_data ADD COLUMN source_type TEXT NOT NULL DEFAULT 'queries'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gsc_source ON gsc_data(source_type)")
+        except sqlite3.OperationalError:
+            pass  # Column already exists (fresh install)
+
     migrations = {
-        # Add future migrations here:
-        # 2: migrate_v1_to_v2,
+        2: migrate_v2,
     }
 
     for version in sorted(migrations.keys()):
@@ -364,16 +377,17 @@ def get_analysis_history(conn: sqlite3.Connection, limit: int = 50) -> List[Dict
     return [dict(r) for r in cursor.fetchall()]
 
 
-def save_gsc_data(conn: sqlite3.Connection, records: List[Dict]):
-    """Save GSC CSV data. Clears existing data first."""
-    conn.execute("DELETE FROM gsc_data")
+def save_gsc_data(conn: sqlite3.Connection, records: List[Dict], source_type: str = "queries"):
+    """Save GSC CSV data. Clears existing data for this source_type first."""
+    conn.execute("DELETE FROM gsc_data WHERE source_type = ?", (source_type,))
     for rec in records:
         conn.execute(
-            """INSERT INTO gsc_data (url, keyword, clicks, impressions, ctr, position, opportunity_score)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO gsc_data (source_type, url, keyword, clicks, impressions, ctr, position, opportunity_score)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                rec["url"],
-                rec["keyword"],
+                source_type,
+                rec.get("url", ""),
+                rec.get("keyword", ""),
                 rec.get("clicks", 0),
                 rec.get("impressions", 0),
                 rec.get("ctr", 0.0),
@@ -384,12 +398,18 @@ def save_gsc_data(conn: sqlite3.Connection, records: List[Dict]):
     conn.commit()
 
 
-def get_gsc_data(conn: sqlite3.Connection, limit: int = 100) -> List[Dict]:
-    """Get GSC data sorted by opportunity score."""
-    cursor = conn.execute(
-        "SELECT * FROM gsc_data ORDER BY opportunity_score DESC LIMIT ?",
-        (limit,),
-    )
+def get_gsc_data(conn: sqlite3.Connection, source_type: str = None, limit: int = 100) -> List[Dict]:
+    """Get GSC data sorted by opportunity score, optionally filtered by source_type."""
+    if source_type:
+        cursor = conn.execute(
+            "SELECT * FROM gsc_data WHERE source_type = ? ORDER BY opportunity_score DESC LIMIT ?",
+            (source_type, limit),
+        )
+    else:
+        cursor = conn.execute(
+            "SELECT * FROM gsc_data ORDER BY opportunity_score DESC LIMIT ?",
+            (limit,),
+        )
     return [dict(r) for r in cursor.fetchall()]
 
 

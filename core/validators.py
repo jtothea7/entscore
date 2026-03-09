@@ -91,17 +91,22 @@ def validate_gsc_csv(df: pd.DataFrame) -> Tuple[bool, str, List[str]]:
     """
     warnings: List[str] = []
 
-    # Check required columns (handle both GSC export formats)
-    required_cols_v1 = ["Top queries", "Clicks", "Impressions", "CTR", "Position"]
-    required_cols_v2 = ["Query", "Clicks", "Impressions", "CTR", "Average position"]
+    # Check required columns (handle Queries and Pages GSC export formats)
+    queries_v1 = ["Top queries", "Clicks", "Impressions", "CTR", "Position"]
+    queries_v2 = ["Query", "Clicks", "Impressions", "CTR", "Average position"]
+    pages_v1 = ["Top pages", "Clicks", "Impressions", "CTR", "Position"]
+    pages_v2 = ["Page", "Clicks", "Impressions", "CTR", "Average position"]
 
-    has_v1 = all(col in df.columns for col in required_cols_v1)
-    has_v2 = all(col in df.columns for col in required_cols_v2)
+    has_any = any(
+        all(col in df.columns for col in fmt)
+        for fmt in [queries_v1, queries_v2, pages_v1, pages_v2]
+    )
 
-    if not (has_v1 or has_v2):
+    if not has_any:
         return (
             False,
-            "CSV missing required columns. Expected: Query, Clicks, Impressions, CTR, Position",
+            "CSV missing required columns. Expected GSC export with "
+            "Top queries/Top pages, Clicks, Impressions, CTR, Position",
             [],
         )
 
