@@ -6,7 +6,11 @@ choose location and page type, hit Analyze, and get routed to the results page.
 """
 import streamlit as st
 import os
+import time
 from dotenv import load_dotenv
+
+# Rate limiting: max analyses per session
+MAX_ANALYSES_PER_HOUR = 10
 
 from core.validators import validate_url, validate_keyword, get_credentials
 from core.gap_analyzer import run_analysis
@@ -143,6 +147,20 @@ def render_analyze_page():
                 else:
                     show_error(f"Could not find '{location_input}'. Using national (US) search.")
 
+        # Rate limiting
+        if "analysis_timestamps" not in st.session_state:
+            st.session_state["analysis_timestamps"] = []
+
+        now = time.time()
+        # Keep only timestamps from the last hour
+        st.session_state["analysis_timestamps"] = [
+            t for t in st.session_state["analysis_timestamps"] if now - t < 3600
+        ]
+
+        if len(st.session_state["analysis_timestamps"]) >= MAX_ANALYSES_PER_HOUR:
+            show_error(f"Rate limit reached ({MAX_ANALYSES_PER_HOUR} analyses per hour). Please wait.")
+            return
+
         # Initialize database
         init_database()
 
@@ -159,6 +177,8 @@ def render_analyze_page():
                 progress_callback=progress.update,
             )
 
+            st.session_state["analysis_timestamps"].append(time.time())
+
             progress.complete()
             show_success(
                 f"Analysis complete! Score: {result['health_score']:.0f}/100 "
@@ -172,7 +192,16 @@ def render_analyze_page():
 
         except Exception as e:
             progress.error(str(e))
-            show_error(f"Analysis failed: {str(e)}")
+            # Sanitize error — don't expose internal details
+            error_msg = str(e)
+            if "credentials" in error_msg.lower() or "401" in error_msg:
+                show_error("Analysis failed: API authentication error. Check Settings.")
+            elif "402" in error_msg or "credits" in error_msg.lower():
+                show_error("Analysis failed: API credits exhausted.")
+            elif "timeout" in error_msg.lower():
+                show_error("Analysis failed: Request timed out. Try again.")
+            else:
+                show_error("Analysis failed. Please try again or check your inputs.")
 
     # Show first-run state if no previous analyses
     if "analysis_id" not in st.session_state:

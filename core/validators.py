@@ -4,6 +4,8 @@ Input validation functions
 from typing import Tuple, List, Optional
 import os
 import re
+import socket
+from ipaddress import ip_address
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -40,16 +42,34 @@ def validate_url(url: str, check_reachable: bool = False) -> Tuple[bool, str]:
     if not parsed.netloc:
         return False, "Invalid URL format - no domain found"
 
-    # SSRF protection: block localhost and private IPs
-    blocked_hosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
-    if parsed.netloc.lower() in blocked_hosts:
+    # SSRF protection: block localhost, private IPs, and reserved ranges
+    hostname = parsed.hostname or ""
+    blocked_hosts = {"localhost", "localhost.localdomain"}
+    if hostname.lower() in blocked_hosts:
         return False, "Localhost URLs are not allowed"
 
-    # Block private IP ranges
-    if re.match(
-        r"^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)", parsed.netloc
+    # Resolve hostname and check the actual IP
+    try:
+        resolved_ip = ip_address(hostname)
+    except ValueError:
+        # Not a raw IP — resolve the domain to check
+        try:
+            resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            if resolved:
+                resolved_ip = ip_address(resolved[0][4][0])
+            else:
+                resolved_ip = None
+        except (socket.gaierror, OSError):
+            resolved_ip = None
+
+    if resolved_ip and (
+        resolved_ip.is_private
+        or resolved_ip.is_loopback
+        or resolved_ip.is_reserved
+        or resolved_ip.is_link_local
+        or resolved_ip.is_multicast
     ):
-        return False, "Private IP addresses are not allowed"
+        return False, "Private, reserved, or internal IP addresses are not allowed"
 
     if check_reachable:
         try:

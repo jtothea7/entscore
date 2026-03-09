@@ -12,6 +12,11 @@ from db.database import get_connection, init_database, get_api_usage_total
 from ui.components.toast import show_success, show_error
 
 
+def _is_cloud_deployment() -> bool:
+    """Detect if running on HF Spaces or Streamlit Cloud."""
+    return bool(os.getenv("SPACE_ID") or os.getenv("STREAMLIT_SHARING_MODE"))
+
+
 def render_settings_page():
     """Render the settings page."""
     st.header("Settings")
@@ -26,32 +31,40 @@ def render_settings_page():
 
     has_creds = bool(current_login and current_password)
     if has_creds:
-        st.success(f"Credentials configured for: {current_login}")
+        # Mask the email — only show first 3 chars
+        masked = current_login[:3] + "***" if len(current_login) > 3 else "***"
+        st.success(f"Credentials configured for: {masked}")
     else:
         st.warning("No DataForSEO credentials configured.")
 
-    with st.expander("Update Credentials"):
-        login = st.text_input("Login (email)", value=current_login)
-        password = st.text_input("Password", type="password", value=current_password)
+    if _is_cloud_deployment():
+        st.info(
+            "Credentials are managed via environment secrets. "
+            "Update them in your HF Spaces or Streamlit Cloud dashboard."
+        )
+    else:
+        with st.expander("Update Credentials"):
+            login = st.text_input("Login (email)", value="")
+            password = st.text_input("Password", type="password", value="")
 
-        if st.button("Save & Test Credentials"):
-            if not login or not password:
-                show_error("Both login and password are required.")
-            else:
-                with st.spinner("Testing credentials..."):
-                    is_valid, error = validate_dataforseo_credentials(login, password)
-
-                if is_valid:
-                    env_path = os.path.join(
-                        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                        ".env",
-                    )
-                    set_key(env_path, "DATAFORSEO_LOGIN", login)
-                    set_key(env_path, "DATAFORSEO_PASSWORD", password)
-                    show_success("Credentials saved and verified!")
-                    st.rerun()
+            if st.button("Save & Test Credentials"):
+                if not login or not password:
+                    show_error("Both login and password are required.")
                 else:
-                    show_error(f"Credential test failed: {error}")
+                    with st.spinner("Testing credentials..."):
+                        is_valid, error = validate_dataforseo_credentials(login, password)
+
+                    if is_valid:
+                        env_path = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            ".env",
+                        )
+                        set_key(env_path, "DATAFORSEO_LOGIN", login)
+                        set_key(env_path, "DATAFORSEO_PASSWORD", password)
+                        show_success("Credentials saved and verified!")
+                        st.rerun()
+                    else:
+                        show_error("Credential test failed. Check your login and password.")
 
     st.divider()
 
